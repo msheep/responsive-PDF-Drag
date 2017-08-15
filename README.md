@@ -11,4 +11,4 @@ When the width or height is larger than its container, the drag is enabled.
 [![Watch the example]](https://drive.google.com/file/d/0B7KoOyok6VqbU3Qxd29hRll3eWM/view?usp=sharing)
 
 
-Just copy it and have a try!
+Just have a try!
