@@ -1,0 +1,336 @@
+<html>
+<head>
+	<title>Responsive PDF & PDF Drag</title>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+	<style>
+		.container{
+			margin-top: 40px;
+		}
+
+		#the-canvas {
+	        position: relative;
+	    }
+
+	    #canvas-container {
+	        width: 100%;
+	        overflow: hidden;
+	        height: 1000px;
+	        text-align: center;
+	        margin-bottom: 20px;
+	        margin-top: 20px;
+	        border: 2px solid red;
+	    }
+	</style>
+</head>
+<body>
+<div class="container">
+	<h1 class="text-center">Responsive PDF & PDF Drag</h1>
+	<div class="row">
+	    <div class="col-lg-12">
+	        <div class="ibox">
+	            <div class="ibox-content">
+	            	
+	            	<div class="text-center pdf-toolbar">
+                        <div class="btn-group m-t-lg m-b-lg">
+                            <button id="prev" class="btn btn-white">
+                                <i class="fa fa-long-arrow-left"></i>
+                                <span class="hidden-xs">Previous</span>
+                            </button>
+                            <button id="next" class="btn btn-white">
+                                <i class="fa fa-long-arrow-right"></i>
+                                <span class="hidden-xs">Next</span>
+                            </button>
+                            <button id="zoomin" class="btn btn-white">
+                                <i class="fa fa-search-plus"></i>
+                                <span class="hidden-xs">Zoom In</span>
+                            </button>
+                            <button id="zoomout" class="btn btn-white">
+                                <i class="fa fa-search-minus"></i>
+                                <span class="hidden-xs">Zoom Out</span>
+                            </button>
+                            <button id="zoomfit" class="btn btn-white"> 100%</button>
+                            <span class="btn btn-white hidden-xs">Page: </span>
+
+                            <div class="input-group">
+                                <input id="page_num" class="form-control" type="text">
+
+                                <div class="input-group-btn">
+                                    <button id="page_count" class="btn btn-white" type="button">/ 2</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="canvas-container">
+                        <canvas id="the-canvas" class="pdfcanvas"></canvas>
+                    </div>
+	            </div>
+	        </div>
+	    </div>
+	</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/1.9.432/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/1.9.432/pdf.min.js"></script>
+<script>
+    //render PDF
+    var pdfDoc = null,
+            canvas_id = 'the-canvas',
+            canvas_container_id = 'canvas-container',
+            canvas = document.getElementById(canvas_id),
+            canvas_container = $('#' + canvas_container_id),
+            scale = 0.8,
+            maxScale = 5.0,
+            minScale = 0.5,
+            zoomRange = 0.25,
+            pageNum = 1,
+            pageNumPending = 0,
+            canvas = document.getElementById('the-canvas'),
+            pdfUrl = 'https://mozilla.github.io/pdf.js/web/compressed.tracemonkey-pldi-09.pdf',
+            ctx = canvas.getContext('2d'),
+            initial = true;
+
+    var desiredWidth = parseFloat(canvas_container.width()),
+            desiredHeight = parseFloat(canvas_container.height());
+
+    var offsetX = canvas.offsetLeft,
+            offsetY = canvas.offsetTop,
+            lastX = 0,
+            lastY = 0,
+            pdfX = 0,
+            pdfY = 0,
+            isDown = false;
+
+    /**
+     * If another page rendering in progress, waits until the rendering is
+     * finised. Otherwise, executes rendering immediately.
+     */
+    function queueRenderPage(num) {
+        if (pageRendering) {
+            pageNumPending = num;
+        } else {
+            pdfPreview(num);
+        }
+    }
+
+    /**
+     * Displays previous page.
+     */
+    function onPrevPage() {
+        if (pageNum <= 1) {
+            return;
+        }
+        pageNum--;
+        queueRenderPage(pageNum);
+    }
+    document.getElementById('prev').addEventListener('click', onPrevPage);
+
+    /**
+     * Displays next page.
+     */
+    function onNextPage() {
+        if (pageNum >= pdfDoc.numPages) {
+            return;
+        }
+        pageNum++;
+        queueRenderPage(pageNum);
+    }
+    document.getElementById('next').addEventListener('click', onNextPage);
+
+    /**
+     * Zoom in page.
+     */
+    function onZoomIn() {
+        if (scale >= maxScale) {
+            return;
+        }
+        scale += zoomRange;
+        var num = pageNum;
+        pdfPreview(num)
+    }
+    document.getElementById('zoomin').addEventListener('click', onZoomIn);
+
+    /**
+     * Zoom out page.
+     */
+    function onZoomOut() {
+        if (scale <= minScale) {
+            return;
+        }
+        scale -= zoomRange;
+        var num = pageNum;
+        pdfPreview(num);
+    }
+    document.getElementById('zoomout').addEventListener('click', onZoomOut);
+
+    /**
+     * Zoom fit page.
+     */
+    function onZoomFit() {
+        scale = 1;
+        var num = pageNum;
+        queueRenderPage(num);
+    }
+    document.getElementById('zoomfit').addEventListener('click', onZoomFit);
+
+    $('#page_num').on('change', function () {
+        var pageNumber = Number($(this).val());
+
+        if (pageNumber > 0 && pageNumber <= pdfDoc.numPages) {
+            queueRenderPage(pageNumber);
+        }
+    });
+
+    function pdfPreview(pageNum) {
+        var re = /\.pdf/g;
+        if (re.test(pdfUrl)) {
+            if (pageNum == undefined) {
+                pageNum = 1;
+            }
+            PDFJS.getDocument(pdfUrl).then(function (pdfDoc_) {
+                pdfDoc = pdfDoc_;
+
+                document.getElementById('page_count').textContent = '/ ' + pdfDoc.numPages;
+
+                if (pageNum > pdfDoc.numPages || pageNum < 1) {
+                    return;
+                } else {
+                    pageRendering = true;
+                    // Render Page
+                    pdfDoc.getPage(pageNum).then(function (page) {
+                        var orig_viewport = page.getViewport(1);
+                        // get initial scale that is the suitable to its container
+                        if (initial) {
+                            var scale_width = parseFloat((desiredWidth / orig_viewport.width).toFixed(2));
+                            var scale_height = parseFloat((desiredHeight / orig_viewport.height).toFixed(2));
+                            scale = Math.min(scale_width, scale_height);
+                        }
+
+                        var viewport = page.getViewport(scale);
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        if (initial) {
+                            desiredWidth = canvas.width;
+                            desiredHeight = canvas.height;
+                        }
+
+                        initial_drag_pdf();
+
+                        // Render PDF page into canvas context
+                        var renderContext = {
+                            canvasContext: ctx,
+                            viewport: viewport
+                        };
+                        var renderTask = page.render(renderContext);
+
+                        // Wait for rendering to finish
+                        renderTask.promise.then(function () {
+                            if (initial) {
+                                initial = false;
+                            }
+                            document.getElementById('page_num').value = pageNum;
+                            pageRendering = false;
+                            if (pageNumPending > 0) {
+                                // New page rendering is pending
+                                pdfPreview();
+                                pageNumPending = 0;
+                            }
+                        });
+                    });
+                }
+            });
+        }
+    }
+
+    pdfPreview();
+
+
+    function handleMouseDown(e) {
+        // get mouse coordinates
+        mouseX = parseInt(e.clientX - offsetX);
+        mouseY = parseInt(e.clientY - offsetY);
+        // set the starting drag position
+        lastX = mouseX;
+        lastY = mouseY;
+        // set the dragging flag
+        isDown = true;
+        $("#" + canvas_id).css('cursor', 'default');
+    }
+
+    function handleMouseUp(e) {
+        // clear the dragging flag
+        isDown = false;
+        $("#" + canvas_id).css('cursor', 'default');
+    }
+
+    function handleMouseMove(e) {
+        $("#" + canvas_id).css('cursor', 'move');
+
+        // if we're not dragging, exit
+        if (!isDown) {
+            return;
+        }
+        //get mouse coordinates
+        mouseX = parseInt(e.clientX - offsetX);
+        mouseY = parseInt(e.clientY - offsetY);
+
+        // calc how much the mouse has moved since we were last here
+        var dx = mouseX - lastX;
+        var dy = mouseY - lastY;
+
+        // set the lastXY for next time we're here
+        lastX = mouseX;
+        lastY = mouseY;
+
+        // set the panXY by how much the mouse has moved
+        pdfX += dx;
+        pdfY += dy;
+
+        // set the drag range
+        var range_height = canvas_container.height();
+        var range_width = canvas_container.width();
+        var min_left = range_width - canvas.width;
+        var min_top = range_height - canvas.height;
+
+        if (pdfY > 0) {
+            pdfY = 0;
+        }
+
+        if (pdfY < min_top) {
+            pdfY = min_top;
+        }
+
+        if (pdfX > 0) {
+            pdfX = 0;
+        }
+
+        if (pdfX < min_left) {
+            pdfX = min_left;
+        }
+
+        $("#" + canvas_id).css({'top': pdfY, 'left': pdfX });
+
+    }
+
+
+    //Enable drag pdf if the pdf is larger than its container
+    function initial_drag_pdf() {
+        if (canvas.width > desiredWidth || canvas.height > desiredHeight) {
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mouseout', handleMouseUp);
+        } else {
+            $("#" + canvas_id).css({'top': 0, 'left': 0 });
+            canvas.removeEventListener('mousedown', handleMouseDown);
+            canvas.removeEventListener('mousemove', handleMouseMove);
+            canvas.removeEventListener('mouseup', handleMouseUp);
+        }
+
+    }
+
+    </script>
+</body>
+</html>
