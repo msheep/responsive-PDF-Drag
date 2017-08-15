@@ -7,3 +7,4 @@ The scale of PDF is based on pdf's container's height and width to get the best 
 
 When the width or height is larger than its container, the drag is enabled.
 
+Just copy it and have a try!
